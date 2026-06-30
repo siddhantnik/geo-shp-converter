@@ -833,6 +833,7 @@ def convert_wfs(
     base_name: str = "output",
     layer: Optional[str] = None,
     crs: str = "EPSG:4326",
+    export_format: str = "shp",
 ) -> ConvertResult:
     """Download a layer from a WFS endpoint and save as Shapefile.
 
@@ -928,6 +929,7 @@ def convert_gdal_source(
     base_name: str = "output",
     layer: Optional[str] = None,
     crs: str = "EPSG:4326",
+    export_format: str = "shp",
 ) -> ConvertResult:
     """Convert one layer of a GDAL file to a zipped ESRI Shapefile bundle.
 
@@ -1162,6 +1164,7 @@ def convert_ogc(
     base_name: str = "output",
     layer: Optional[str] = None,
     crs: str = "EPSG:4326",
+    export_format: str = "shp",
 ) -> ConvertResult:
     """Download a layer from an OGC API Features endpoint and save as Shapefile."""
     os.makedirs(output_dir, exist_ok=True)
