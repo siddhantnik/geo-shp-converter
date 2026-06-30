@@ -64,22 +64,9 @@ st.markdown(
 html, body {
     font-family: 'Times New Roman', Times, serif !important;
 }
-html, body, [class*="css"], label, [data-testid="stWidgetLabel"] p, .stMarkdown p, p, span, code {
-    color: #000000 !important;
-}
 code {
     background: transparent !important;
-}
-
-/* ── App background gradient ──────────────────────────────────────── */
-.stApp {
-    background: #e6e3da !important;
-}
-
-/* ── Sidebar ──────────────────────────────────────────────────────── */
-[data-testid="stSidebar"] {
-    background: #e6e3da !important;
-    border-right: 1px solid #dee2e6;
+    color: #000000 !important;
 }
 
 [data-testid="stSidebar"] .stMarkdown h2,
@@ -290,13 +277,13 @@ div[data-testid="stButton"] > button:hover,
 
 /* ── File uploader ─────────────────────────────────────────────────── */
 [data-testid="stFileUploader"] {
-    background: #333333 !important;
-    border: 1.5px dashed #555555 !important;
+    background: #ffffff !important;
+    border: 1.5px dashed #cccccc !important;
     border-radius: 12px !important;
     transition: border-color 0.2s;
 }
 [data-testid="stFileUploadDropzone"] *, [data-testid="stFileUploaderDropzone"] *, [data-testid="stFileUploader"] * {
-    color: #ffffff !important;
+    color: #000000 !important;
 }
 [data-testid="stFileUploader"]:hover {
     border-color: #000000 !important;
