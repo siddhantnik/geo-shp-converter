@@ -674,12 +674,13 @@ sources_from_urls: list[dict] = []
 
 with tab_file:
     st.markdown(
-        '<div class="section-heading">Upload JSON / GeoJSON files</div>',
+        '<div class="section-heading">Upload GIS files</div>',
         unsafe_allow_html=True,
     )
+    st.info("Upload raw files or .zip bundles (for File Geodatabases or zipped Shapefiles). Multiple files like .shp and .dbf can be uploaded together.")
     uploaded = st.file_uploader(
         "Drag & drop or browse",
-        type=["json", "geojson", "gpkg", "kml", "kmz", "gpx", "dxf", "topojson", "sqlite", "gml", "fgb", "tab", "mif", "mid", "dgn", "csv", "tsv", "xlsx", "xls", "py", "xsd", "map", "dat", "id", "mvt", "pbf"],
+        type=["json", "geojson", "gpkg", "kml", "kmz", "gpx", "dxf", "topojson", "sqlite", "gml", "fgb", "tab", "mif", "mid", "dgn", "csv", "tsv", "xlsx", "xls", "py", "xsd", "map", "dat", "id", "mvt", "pbf", "shp", "shx", "dbf", "prj", "zip"],
         accept_multiple_files=True,
         label_visibility="collapsed",
     )
@@ -703,7 +704,7 @@ with tab_file:
         name_counts: dict[str, int] = {}
         for f in uploaded:
             # Skip sidecar files so they aren't processed as primary geometries
-            if f.name.lower().endswith((".xsd", ".map", ".dat", ".id")):
+            if f.name.lower().endswith((".xsd", ".map", ".dat", ".id", ".shx", ".dbf", ".prj", ".cpg")):
                 continue
                 
             stem = Path(f.name).stem
@@ -713,14 +714,18 @@ with tab_file:
             else:
                 name_counts[stem] = 1
 
-            if f.name.lower().endswith((".gpkg", ".kml", ".kmz", ".gpx", ".dxf", ".topojson", ".sqlite", ".gml", ".fgb", ".tab", ".mif", ".mid", ".dgn", ".mvt", ".pbf")):
+            if f.name.lower().endswith((".gpkg", ".kml", ".kmz", ".gpx", ".dxf", ".topojson", ".sqlite", ".gml", ".fgb", ".tab", ".mif", ".mid", ".dgn", ".mvt", ".pbf", ".shp", ".zip")):
                 # GDAL Source: Must be read from disk, so we use the shared temp path
                 tmp_path = os.path.join(st.session_state.shared_tmp_dir, f.name)
                 
+                source_path = tmp_path
+                if f.name.lower().endswith(".zip"):
+                    source_path = f"zip://{tmp_path}"
+                
                 if f.name not in st.session_state.gpkg_saved:
                     try:
-                        layers = list_gdal_layers(tmp_path)
-                        st.session_state.gpkg_saved[f.name] = {"path": tmp_path, "layers": layers}
+                        layers = list_gdal_layers(source_path)
+                        st.session_state.gpkg_saved[f.name] = {"path": source_path, "layers": layers}
                     except Exception as exc:
                         st.error(f"**{f.name}**: {exc}")
                         continue
