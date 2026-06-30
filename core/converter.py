@@ -115,6 +115,9 @@ class ConvertResult:
     redirect_url: Optional[str] = None
     """If input_type == METADATA_REDIRECT, the URL that was followed."""
 
+    export_format: str = "shp"
+    """Format of the exported file (shp or gdb)."""
+
 
 @dataclass
 class BatchResult:
@@ -618,7 +621,7 @@ def _safe_basename(name: str, max_len: int = 50) -> str:
     return slug or "output"
 
 
-def _write_shapefile_bundle(gdf: gpd.GeoDataFrame, output_dir: str, safe_basename: str, zip_path: str):
+def export_shapefile(gdf: gpd.GeoDataFrame, output_dir: str, safe_basename: str, zip_path: str):
     """Write GeoDataFrame to shapefile(s). If geometries are mixed, split by type."""
     # Shapefiles do not support mixed geometries (e.g. Point and Polygon in the same file)
     geom_types = gdf.geometry.geom_type.dropna().unique()
@@ -646,6 +649,48 @@ def _write_shapefile_bundle(gdf: gpd.GeoDataFrame, output_dir: str, safe_basenam
                         zf.write(part, arcname=sub_name + ext)
 
 
+def export_geodatabase(gdf: gpd.GeoDataFrame, output_dir: str, safe_basename: str, zip_path: str):
+    """Write GeoDataFrame to a File Geodatabase (.gdb) and zip it."""
+    import fiona
+    
+    # Check for GDB writing support
+    driver = None
+    if "OpenFileGDB" in fiona.supported_drivers and "w" in fiona.drvsupport.supported_drivers.get("OpenFileGDB", ""):
+        driver = "OpenFileGDB"
+    elif "FileGDB" in fiona.supported_drivers and "w" in fiona.drvsupport.supported_drivers.get("FileGDB", ""):
+        driver = "FileGDB"
+        
+    if not driver:
+        raise NotImplementedError(
+            "Your environment does not support writing File Geodatabases (.gdb). "
+            "GDAL 3.6+ and Fiona 1.9+ are required with OpenFileGDB write support."
+        )
+
+    gdb_dir = os.path.join(output_dir, f"{safe_basename}.gdb")
+    geom_types = gdf.geometry.geom_type.dropna().unique()
+    
+    try:
+        if len(geom_types) <= 1:
+            gdf.to_file(gdb_dir, driver=driver, layer=safe_basename)
+        else:
+            for gtype in geom_types:
+                sub_gdf = gdf[gdf.geometry.geom_type == gtype]
+                if sub_gdf.empty:
+                    continue
+                gtype_suffix = str(gtype).replace(" ", "")
+                sub_name = f"{safe_basename}_{gtype_suffix}"
+                sub_gdf.to_file(gdb_dir, driver=driver, layer=sub_name)
+    except Exception as exc:
+        raise Exception(f"Failed to write Geodatabase: {exc}")
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+        for root, _, files in os.walk(gdb_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, os.path.dirname(gdb_dir))
+                zf.write(file_path, arcname=arcname)
+
+
 def convert(
     source: str,
     output_dir: str,
@@ -654,6 +699,7 @@ def convert(
     lon_field: Optional[str] = None,
     headers: Optional[dict] = None,
     crs: str = "EPSG:4326",
+    export_format: str = "shp",
     data: Optional[dict | list] = None,
 ) -> ConvertResult:
     """Convert a JSON source to a zipped ESRI Shapefile bundle.
@@ -729,8 +775,12 @@ def convert(
 
     # 6. Write shapefile(s) and bundle into zip
     safe = _safe_basename(base_name)
-    zip_path = os.path.join(output_dir, f"{safe}.zip")
-    _write_shapefile_bundle(gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(gdf, output_dir, safe, zip_path)
 
     # 8. Assemble metadata
     geom_types = [g for g in gdf.geometry.geom_type.unique().tolist() if g]
@@ -750,6 +800,7 @@ def convert(
         crs=str(gdf.crs) if gdf.crs else crs,
         source_name=base_name,
         redirect_url=redirect_url,
+        export_format=export_format,
     )
 
 
@@ -812,8 +863,12 @@ def convert_wfs(
     gdf, trunc_map, col_warnings = _check_column_collisions(gdf)
 
     safe = _safe_basename(base_name)
-    zip_path = os.path.join(output_dir, f"{safe}.zip")
-    _write_shapefile_bundle(gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(gdf, output_dir, safe, zip_path)
 
     geom_types = [g for g in gdf.geometry.geom_type.unique().tolist() if g]
     changed = {orig: final for orig, final in trunc_map.items() if orig != final}
@@ -829,6 +884,7 @@ def convert_wfs(
         crs=str(gdf.crs) if gdf.crs else crs,
         source_name=base_name,
         redirect_url=None,
+        export_format=export_format,
     )
 
 
@@ -919,8 +975,12 @@ def convert_gdal_source(
 
     # Write shapefile bundle
     safe = _safe_basename(base_name)
-    zip_path = os.path.join(output_dir, f"{safe}.zip")
-    _write_shapefile_bundle(gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(gdf, output_dir, safe, zip_path)
 
     geom_types = [g for g in gdf.geometry.geom_type.unique().tolist() if g]
     changed = {orig: final for orig, final in trunc_map.items() if orig != final}
@@ -936,6 +996,7 @@ def convert_gdal_source(
         crs=str(gdf.crs) if gdf.crs else crs,
         source_name=base_name,
         redirect_url=None,
+        export_format=export_format,
     )
 
 
@@ -1067,7 +1128,6 @@ def batch_convert(
 import os
 from typing import Optional
 import geopandas as gpd
-from core.converter import ConvertResult, _check_column_collisions, _safe_basename, _write_shapefile_bundle
 from core.exceptions import ConverterError
 import requests
 
@@ -1124,8 +1184,12 @@ def convert_ogc(
     gdf, trunc_map, col_warnings = _check_column_collisions(gdf)
 
     safe = _safe_basename(base_name)
-    zip_path = os.path.join(output_dir, f"{safe}.zip")
-    _write_shapefile_bundle(gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(gdf, output_dir, safe, zip_path)
 
     geom_types = [g for g in gdf.geometry.geom_type.unique().tolist() if g]
     changed = {orig: final for orig, final in trunc_map.items() if orig != final}
@@ -1141,6 +1205,7 @@ def convert_ogc(
         crs=str(gdf.crs) if gdf.crs else crs,
         source_name=base_name,
         redirect_url=None,
+        export_format=export_format,
     )
 
 def convert_osm(
@@ -1184,7 +1249,12 @@ def convert_osm(
     zip_path = os.path.join(output_dir, f"{safe}.zip")
     
     # To handle mixed geometries safely, we can export multiple shapefiles
-    _write_shapefile_bundle(gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(gdf, output_dir, safe, zip_path)
 
     types_list = [g for g in gdf.geometry.geom_type.unique().tolist() if g]
     changed = {orig: final for orig, final in trunc_map.items() if orig != final}
@@ -1200,6 +1270,7 @@ def convert_osm(
         crs=str(gdf.crs) if gdf.crs else crs,
         source_name=base_name,
         redirect_url=None,
+        export_format=export_format,
     )
 
 
@@ -1303,7 +1374,12 @@ def convert_xyz_tiles(
     
     safe = _safe_basename(base_name)
     zip_path = os.path.join(output_dir, f"{safe}.zip")
-    _write_shapefile_bundle(merged_gdf, output_dir, safe, zip_path)
+    if export_format == "gdb":
+        zip_path = os.path.join(output_dir, f"{safe}.gdb.zip")
+        export_geodatabase(merged_gdf, output_dir, safe, zip_path)
+    else:
+        zip_path = os.path.join(output_dir, f"{safe}.zip")
+        export_shapefile(merged_gdf, output_dir, safe, zip_path)
     
     geom_types = [str(g) for g in merged_gdf.geometry.geom_type.unique().tolist() if g]
     changed = {orig: final for orig, final in trunc_map.items() if orig != final}
@@ -1319,6 +1395,7 @@ def convert_xyz_tiles(
         crs=str(merged_gdf.crs) if merged_gdf.crs else crs,
         source_name=base_name,
         redirect_url=None,
+        export_format=export_format,
     )
 
 
