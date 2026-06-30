@@ -911,6 +911,9 @@ def list_gdal_layers(source_path: str) -> list[str]:
         fiona.drvsupport.supported_drivers['FlatGeobuf'] = 'rw'
         fiona.drvsupport.supported_drivers['MapInfo File'] = 'rw'
         fiona.drvsupport.supported_drivers['DGN'] = 'rw'
+        fiona.drvsupport.supported_drivers['ESRI Shapefile'] = 'rw'
+        fiona.drvsupport.supported_drivers['OpenFileGDB'] = 'r'
+        fiona.drvsupport.supported_drivers['FileGDB'] = 'r'
         layers = fiona.listlayers(source_path)
     except Exception as exc:
         raise ConverterError(f"Cannot read file '{source_path}': {exc}") from exc
@@ -958,6 +961,9 @@ def convert_gdal_source(
         fiona.drvsupport.supported_drivers['FlatGeobuf'] = 'rw'
         fiona.drvsupport.supported_drivers['MapInfo File'] = 'rw'
         fiona.drvsupport.supported_drivers['DGN'] = 'rw'
+        fiona.drvsupport.supported_drivers['ESRI Shapefile'] = 'rw'
+        fiona.drvsupport.supported_drivers['OpenFileGDB'] = 'r'
+        fiona.drvsupport.supported_drivers['FileGDB'] = 'r'
         gdf = gpd.read_file(source_path, layer=target_layer)
     except Exception as exc:
         raise ConverterError(
