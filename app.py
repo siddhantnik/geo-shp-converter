@@ -48,7 +48,7 @@ from core.exceptions import (
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Shapefile Converter",
+    page_title="GIS Converter",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -446,6 +446,7 @@ def _run_single(
     layer: Optional[str] = None,
     headers: dict,
     crs: str,
+    export_format: str,
 ) -> dict:
     """Run convert() for one source; return a result dict for session state."""
     item_dir = os.path.join(
@@ -459,6 +460,7 @@ def _run_single(
                 base_name=name,
                 layer=layer,
                 crs=crs,
+                export_format=export_format,
             )
         elif is_wfs:
             result: ConvertResult = convert_wfs(
@@ -467,6 +469,7 @@ def _run_single(
                 base_name=name,
                 layer=layer,
                 crs=crs,
+                export_format=export_format,
             )
         elif is_ogc:
             result: ConvertResult = convert_ogc(
@@ -475,6 +478,7 @@ def _run_single(
                 base_name=name,
                 layer=layer,
                 crs=crs,
+                export_format=export_format,
             )
         elif is_osm:
             result: ConvertResult = convert_osm(
@@ -483,6 +487,7 @@ def _run_single(
                 output_dir=item_dir,
                 base_name=name,
                 crs=crs,
+                export_format=export_format,
             )
         elif is_xyz:
             result: ConvertResult = convert_xyz_tiles(
@@ -492,6 +497,7 @@ def _run_single(
                 output_dir=item_dir,
                 base_name=name,
                 crs=crs,
+                export_format=export_format,
             )
         else:
             result: ConvertResult = convert(
@@ -502,6 +508,7 @@ def _run_single(
                 lon_field=lon_field,
                 headers=headers,
                 crs=crs,
+                export_format=export_format,
                 data=data,
             )
         with open(result.zip_path, "rb") as fh:
@@ -532,7 +539,7 @@ def _run_single(
         }
 
 
-def _run_all(sources: list[dict], headers: dict, crs: str) -> None:
+def _run_all(sources: list[dict], headers: dict, crs: str, export_format: str) -> None:
     """Convert all sources, populate session state."""
     results = []
     needs_latlon = []
@@ -566,6 +573,7 @@ def _run_all(sources: list[dict], headers: dict, crs: str) -> None:
             layer=item.get("layer"),
             headers=headers,
             crs=crs,
+            export_format=export_format,
         )
         if r.get("needs_latlon"):
             needs_latlon.append(r)
@@ -647,14 +655,11 @@ def _build_batch_zip_bytes(results: list[dict], merge: bool, crs: str) -> Option
 # ---------------------------------------------------------------------------
 
 st.markdown(
-    '<div class="app-title">Shapefile Converter</div>',
+    '<div class="app-title">GIS Converter</div>',
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="app-subtitle">'
-    "Convert geospatial JSON (GeoJSON, metadata APIs, flat lat/lon tables) "
-    "to ESRI Shapefile bundles ready for QGIS — locally, no data leaves your machine."
-    "</div>",
+    '<div class="app-subtitle">Convert GIS datasets from multiple formats into ESRI Shapefiles or File Geodatabases. All processing happens locally on your machine.</div>',
     unsafe_allow_html=True,
 )
 
@@ -800,12 +805,23 @@ with tab_file:
                 + ", ".join(f"**{s['name']}**" for s in sources_from_files)
             )
 
-    convert_files_btn = st.button(
-        "Convert Files",
-        type="primary",
-        disabled=not sources_from_files,
-        key="btn_convert_files"
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        convert_shp_file_btn = st.button(
+            "Convert to Shapefile",
+            type="primary",
+            use_container_width=True,
+            disabled=not sources_from_files,
+            key="btn_convert_shp_file"
+        )
+    with col2:
+        convert_gdb_file_btn = st.button(
+            "Convert to Geodatabase",
+            type="primary",
+            use_container_width=True,
+            disabled=not sources_from_files,
+            key="btn_convert_gdb_file"
+        )
 with tab_url:
     api_mode = st.radio("API Type", ["Standard URLs (GeoJSON, WFS, OGC)", "OpenStreetMap (Overpass)", "XYZ Vector Tiles"], horizontal=True, label_visibility="collapsed")
     
@@ -936,12 +952,23 @@ with tab_url:
                 + ", ".join(f"`{s['source']}`" for s in sources_from_urls)
             )
 
-    convert_urls_btn = st.button(
-        "Convert URLs",
-        type="primary",
-        disabled=not sources_from_urls,
-        key="btn_convert_urls",
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        convert_shp_url_btn = st.button(
+            "Convert to Shapefile",
+            type="primary",
+            use_container_width=True,
+            disabled=not sources_from_urls,
+            key="btn_convert_shp_url",
+        )
+    with col2:
+        convert_gdb_url_btn = st.button(
+            "Convert to Geodatabase",
+            type="primary",
+            use_container_width=True,
+            disabled=not sources_from_urls,
+            key="btn_convert_gdb_url",
+        )
 
 # ---------------------------------------------------------------------------
 # Trigger conversion
@@ -950,16 +977,28 @@ with tab_url:
 _headers = _parse_headers()
 _crs = _clean_crs(crs_override)
 
-if convert_files_btn and sources_from_files:
+if convert_shp_file_btn and sources_from_files:
     st.session_state.pending_sources = sources_from_files
-    with st.spinner("Converting…"):
-        _run_all(sources_from_files, _headers, _crs)
+    with st.spinner("Converting to Shapefile…"):
+        _run_all(sources_from_files, _headers, _crs, export_format="shp")
     st.rerun()
 
-if convert_urls_btn and sources_from_urls:
+if convert_gdb_file_btn and sources_from_files:
+    st.session_state.pending_sources = sources_from_files
+    with st.spinner("Converting to Geodatabase…"):
+        _run_all(sources_from_files, _headers, _crs, export_format="gdb")
+    st.rerun()
+
+if convert_shp_url_btn and sources_from_urls:
     st.session_state.pending_sources = sources_from_urls
-    with st.spinner("Fetching & converting…"):
-        _run_all(sources_from_urls, _headers, _crs)
+    with st.spinner("Fetching & converting to Shapefile…"):
+        _run_all(sources_from_urls, _headers, _crs, export_format="shp")
+    st.rerun()
+
+if convert_gdb_url_btn and sources_from_urls:
+    st.session_state.pending_sources = sources_from_urls
+    with st.spinner("Fetching & converting to Geodatabase…"):
+        _run_all(sources_from_urls, _headers, _crs, export_format="gdb")
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -1084,10 +1123,11 @@ if st.session_state.converted:
                         "to fit the 10-character shapefile limit."
                     )
 
+            file_ext = ".gdb.zip" if getattr(res, "export_format", "shp") == "gdb" else ".zip"
             st.download_button(
-                label=f"Download {_safe_basename(name)}.zip",
+                label=f"Download {_safe_basename(name)}{file_ext}",
                 data=r["zip_bytes"],
-                file_name=f"{_safe_basename(name)}.zip",
+                file_name=f"{_safe_basename(name)}{file_ext}",
                 mime="application/zip",
                 key=f"dl_{name}",
             )
@@ -1193,7 +1233,7 @@ if st.session_state.converted:
                 )
             with st.spinner("Retrying with selected lat/lon fields…"):
                 # Run only the pending items
-                _run_all(retry_sources, _headers, _crs)
+                _run_all(retry_sources, _headers, _crs, export_format='shp')  # Default to shp for retry for now
                 # Merge retry results into the pre-existing successful results
                 existing_ok = [r for r in results if "result" in r]
                 retry_results = st.session_state.results  # from _run_all above
@@ -1254,7 +1294,7 @@ st.markdown(
     """
 <div style="margin-top:3rem; padding-top:1rem; border-top:1px solid rgba(48,54,61,0.5);
             text-align:center; font-size:0.72rem; color:#404862;">
-  Shapefile Converter &nbsp;·&nbsp; Stateless local tool &nbsp;·&nbsp;
+  GIS Converter &nbsp;·&nbsp; Stateless local tool &nbsp;·&nbsp;
   All processing happens on your machine &nbsp;·&nbsp;
   Built with Streamlit · GeoPandas · Shapely · Fiona
 </div>
